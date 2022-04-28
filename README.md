@@ -6,7 +6,7 @@ Some interested guys took together to sniff the communication between Hoymiles D
 values from the inverter like actual voltage, current and power of the inverter.
 On lumapu's repo https://github.com/lumapu/ahoy you can find some different ways to get these informations depending on preferred hardware:
 - a Python script for the Raspberry pi
-- a pure ESP version fpr ESP8266 like Wemos D1 mini or ESP32
+- a pure ESP version for ESP8266 like Wemos D1 mini or ESP32
 - a small version for the Arduino Nano
 
 My goal was to have one version for Arduinos as well ESP microcontrollers. 
