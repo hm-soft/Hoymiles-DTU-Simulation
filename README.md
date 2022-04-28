@@ -12,4 +12,4 @@ On lumapu's repo https://github.com/lumapu/ahoy you can find some different ways
 My goal was to have one version for Arduinos as well ESP microcontrollers. 
 The project is developed in the Arduino IDE, so the main file is the .ino file.
 
-First, I'm german and my english is very poor. And the comments in the code is mostly in german.
+And last, I'm german and my english is very poor. And the comments in the code is mostly in german.
