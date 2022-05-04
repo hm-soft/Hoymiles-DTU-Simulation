@@ -25,8 +25,8 @@ typedef struct _Serial_header_t {
 // structs für Inverter und Kanalwerte
 
 // Liste der Einheiten
-enum UNITS {UNIT_V = 0, UNIT_HZ, UNIT_A, UNIT_W,  UNIT_WH, UNIT_C, UNIT_KWH, UNIT_MA, UNIT_PCT};
-const char* const units[] = {"V", "Hz", "A", "W", "Wh", "°C", "KWh", "mA", "%"};
+enum UNITS {UNIT_V = 0, UNIT_HZ, UNIT_A, UNIT_W,  UNIT_WH, UNIT_C, UNIT_KWH, UNIT_MA, UNIT_PCT, UNIT_NIX};
+const char* const units[] = {"V", "Hz", "A", "W", "Wh", "°C", "KWh", "mA", "%", ""};
 
 // CH0 is default channel (freq, ac, temp)
 enum CHANNELS {CH0 = 0, CH1, CH2, CH3, CH4};
@@ -49,6 +49,7 @@ const char E_HEUTE[]  PROGMEM  = "E-heute";
 const char IPV[]      PROGMEM  = "Ipv";
 const char WR_TEMP[]  PROGMEM = "WR-Temp";
 const char PERCNT[]   PROGMEM = "Pct";
+const char WR_STATUS[]PROGMEM = "Status";
 
 #define IDX_UDC       0
 #define IDX_IDC       1
@@ -63,9 +64,10 @@ const char PERCNT[]   PROGMEM = "Pct";
 #define IDX_IPV      10
 #define IDX_WR_TEMP  11
 #define IDX_PERCNT   12    
+#define IDX_STATUS   13
 
 const char* const NAMES[] 
-  = {UDC, IDC, PDC, E_WOCHE, E_TOTAL, E_TAG, UAC, FREQ, PAC, E_HEUTE, IPV, WR_TEMP, PERCNT};
+  = {UDC, IDC, PDC, E_WOCHE, E_TOTAL, E_TAG, UAC, FREQ, PAC, E_HEUTE, IPV, WR_TEMP, PERCNT, WR_STATUS};
 
 typedef float (*calcValueFunc)(float *);
 
@@ -260,7 +262,7 @@ uint8_t getDigits (uint8_t wr, uint8_t i) {
 
 #include "HM600.h"            // für HM-600 und HM-700
 
-#include "HM1200.h"
+//#include "HM1200.h"
 
 // +++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
 

@@ -52,7 +52,7 @@ void handleRoot() {
   char line[100];
   for (uint8_t wr = 0; wr < anzInv; wr++) {
     out += "<h3>" + String(inverters[wr].name) + "</h3>";
-    out += "<h3>S/N " + String (getSerialNoTxt(wr)) + "</h3>";
+    out += "<h3>S/N " + String (uint64toa(inverters[wr].serialNo)) + "</h3>";
     out += "<br><br><table border='1'>";
     out += "<tr><th>Kanal</th><th>Wert</th><th>Einheit</th></tr>";
     for (uint8_t i = 0; i < inverters[wr].anzTotalMeasures; i++) {
