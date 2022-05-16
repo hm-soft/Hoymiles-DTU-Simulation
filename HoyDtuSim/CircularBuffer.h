@@ -132,6 +132,7 @@ template <class T> class CircularBuffer
       DISABLE_IRQ;
       if (!empty())
       {
+        memset (&(m_buff[back()]), 0, sizeof(T));
         m_fill--;
         ok = true;
       }

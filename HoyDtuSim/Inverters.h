@@ -99,6 +99,8 @@ struct inverter_t {
   measureCalc_t *measureCalculated;       // Liste mit Defintion für berechnete Werte
   uint8_t       anzMeasureCalculated;     // Länge der Liste
   uint8_t       anzTotalMeasures;         // Gesamtanzahl Messwerte
+  uint8_t       fragmentCount;
+  uint8_t       fragmentLen[10];
   float         values[MAX_MEASURE_PER_INV];  // DIE Messewerte
 };
 
@@ -107,6 +109,7 @@ char _buffer[20];
 
 uint8_t anzInv = 0;
 inverter_t inverters[MAX_ANZ_INV];
+uint16_t totalFragments = 0;
   
 union longlongasbytes {
   uint64_t ull;
@@ -139,7 +142,8 @@ uint64_t Serial2RadioID (uint64_t sn) {
 
 void addInverter (uint8_t _ID, const char * _name, uint64_t _serial, 
                   const measureDef_t * liste, int anzMeasure,
-                  measureCalc_t * calcs, int anzMeasureCalculated) {
+                  measureCalc_t * calcs, int anzMeasureCalculated,
+                  uint8_t _fragmentLen[]) {
 //-------------------------------------------------------------------------------------
   if (anzInv >= MAX_ANZ_INV) {
     DEBUG_OUT.println(F("ANZ_INV zu klein!"));
@@ -155,12 +159,16 @@ void addInverter (uint8_t _ID, const char * _name, uint64_t _serial,
   p->anzMeasureCalculated = anzMeasureCalculated;
   p->measureCalculated    = calcs;
   p->anzTotalMeasures     = anzMeasure + anzMeasureCalculated;
+  p->fragmentCount        = _fragmentLen[0];
+  totalFragments += p->fragmentCount;
+  memcpy (p->fragmentLen, &_fragmentLen[1], p->fragmentCount);
   memset (p->values, 0, sizeof(p->values));
 
   DEBUG_OUT.print (F("WR       : "));      DEBUG_OUT.println(anzInv);
   DEBUG_OUT.print (F("Type     : "));      DEBUG_OUT.println(_name);
   DEBUG_OUT.print (F("Serial   : "));      DEBUG_OUT.println(uint64toa(_serial));
   DEBUG_OUT.print (F("Radio-ID : "));      DEBUG_OUT.println(uint64toa(p->RadioId));
+  DEBUG_OUT.print (F("Fragmente: "));      DEBUG_OUT.println(p->fragmentCount);
 
   anzInv++;
 }
@@ -272,7 +280,8 @@ void setupInverts() {
 
   addInverter (0,"HM-600", 0x114172607952ULL, 
                hm600_measureDef, HM600_MEASURE_LIST_LEN,     // Tabelle der Messwerte
-               hm600_measureCalc, HM600_CALCED_LIST_LEN); // Tabelle berechnete Werte
+               hm600_measureCalc, HM600_CALCED_LIST_LEN,     // Tabelle der Berechnungen
+               hm600_fragmentLen);                           // Tabelle berechnete Werte
 
 /*
   addInverter (1,"HM-1200", 0x114172607952ULL, 

@@ -11,7 +11,7 @@
 #include "Debug.h"
 #include "Inverters.h"
 
-const char VERSION[] PROGMEM = "0.1.6";
+const char VERSION[] PROGMEM = "0.2.1";
 
 
 #ifdef ESP8266
@@ -52,7 +52,7 @@ static uint16_t lastCRC;
 static uint16_t crc;
 
 uint8_t         channels[]            = {3, 23, 40, 61, 75};   //{1, 3, 6, 9, 11, 23, 40, 61, 75}
-uint8_t         channelIdx            = 2;                         // fange mit 40 an
+uint8_t         channelIdx            = 1;                         // fange mit 40 an
 uint8_t         DEFAULT_SEND_CHANNEL  = channels[channelIdx];      // = 40
 
 #if USE_POOR_MAN_CHANNEL_HOPPING_RCV
@@ -77,13 +77,13 @@ static unsigned long timeLastHoyOnCheck = timeLastPacket;
 
 // Function forward declaration
 static void SendPacket(uint64_t dest, uint8_t *buf, uint8_t len);
-
+void shiftPayload (NRF24_packet_t *p);
+void outputPacket(NRF24_packet_t *p, uint8_t payloadLen);
 
 static const char BLANK = ' ';
 
 static boolean istTag = true;
 
-char CHANNELNAME_BUFFER[15];
 
 #ifdef ESP8266
   #include "wifi.h"
@@ -103,7 +103,7 @@ inline static void dumpData(uint8_t *p, int len) {
   DEBUG_OUT.print(BLANK);
 }
 
-float extractValue (uint8_t *p, uint8_t bytes, uint8_t divisor) {
+float extractValue (uint8_t *p, uint8_t bytes, uint16_t divisor) {
 //--------------------------------------------------------------  
   uint32_t val = 0;
   do {
@@ -123,12 +123,12 @@ void outChannel (uint8_t wr, uint8_t i) {
 }
 
 
-void analyseWords (uint8_t *p) {    // p zeigt auf 01 hinter 2. WR-Adr
+void analyseWords (uint8_t *p, uint8_t limit) {    // p zeigt auf 01 hinter 2. WR-Adr
 //----------------------------------
   //uint16_t val;
   DEBUG_OUT.print (F("analyse words:"));
   p++;
-  for (int i = 0; i <12;i++) {
+  for (int i = 0; i <limit;i++) {
     DEBUG_OUT.print(extractValue (p,2,1));
     DEBUG_OUT.print(BLANK);
     p++;
@@ -136,12 +136,12 @@ void analyseWords (uint8_t *p) {    // p zeigt auf 01 hinter 2. WR-Adr
   DEBUG_OUT.println();
 }
 
-void analyseLongs (uint8_t *p) {    // p zeigt auf 01 hinter 2. WR-Adr
-//----------------------------------
+void analyseLongs (uint8_t *p, uint8_t limit) {    // p zeigt auf 01 hinter 2. WR-Adr
+//-------------------------------------------
   //uint16_t val;
   DEBUG_OUT.print (F("analyse longs:"));
   p++;
-  for (int i = 0; i <12;i++) {
+  for (int i = 0; i <limit;i++) {
     DEBUG_OUT.print(extractValue(p,4,1));
     DEBUG_OUT.print(BLANK);
     p++;
@@ -157,13 +157,34 @@ void analyse (NRF24_packet_t *p) {
   if (wrIdx == 0xFF) return;
   uint8_t cmd = p->packet[11];
   float val = 0;
-  if (cmd == 0x01 || cmd == 0x02 || cmd == 0x83) {
-    const measureDef_t *defs = inverters[wrIdx].measureDef;
 
+  if (cmd < inverters[wrIdx].fragmentCount || cmd == (0x80 + inverters[wrIdx].fragmentCount)) {
+    const measureDef_t *defs = inverters[wrIdx].measureDef;
     for (uint8_t i = 0; i < inverters[wrIdx].anzMeasures; i++) {
       if (defs[i].teleId == cmd) {
         uint8_t pos = defs[i].pos;
-        val = extractValue (&p->packet[pos], defs[i].bytes, getDivisor(wrIdx, i) );
+        uint8_t bytes = defs[i].bytes;
+        uint8_t frlIdx = (cmd > 0x80 ? cmd - 0x80 : cmd) -  1;
+        if (pos + bytes <= 12 + inverters[wrIdx].fragmentLen[frlIdx])
+          val = extractValue (&p->packet[pos], bytes, getDivisor(wrIdx, i) );
+        else {
+          // gesplitteter Wert
+          val = inverters[wrIdx].values[i];   // damit Wert bleibt, wenn nicht berechnet werden kann
+          NRF24_packet_t *x;
+          // suche Daten von cmd+1 
+          uint8_t suchCmd = (cmd == inverters[wrIdx].fragmentCount-1 ? 0x80 + inverters[wrIdx].fragmentCount : cmd + 1);
+          for (uint8_t b = 0; b < PACKET_BUFFER_SIZE; b++) {
+            x = &bufferData[b]; 
+            if (x->timestamp) {
+              if (x->packet[11] == suchCmd) {
+                uint32_t val1 = (p->packet[pos] << 8) | p->packet[pos+1];
+                uint32_t val2 = (x->packet[12] << 8) | x->packet[13];
+                val1 = (val1 <<16) + val2;
+                val = (float)(val1) / (float)getDivisor(wrIdx, i);
+              } // if
+            } // if
+          } // for
+        }
         valueChanged = valueChanged || (val != inverters[wrIdx].values[i]);
         inverters[wrIdx].values[i] = val;
       }      
@@ -181,8 +202,11 @@ void analyse (NRF24_packet_t *p) {
   }
   else {
     DEBUG_OUT.print (F("---- neues cmd=")); DEBUG_OUT.println(cmd, HEX);
-    analyseWords (&p->packet[11]);
-    analyseLongs (&p->packet[11]);
+    uint8_t payloadLen = ((p->packet[0] & 0x01) << 5) | (p->packet[1] >> 3);
+    if (payloadLen > MAX_RF_PAYLOAD_SIZE)
+      payloadLen = MAX_RF_PAYLOAD_SIZE;
+    analyseWords (&p->packet[11], payloadLen);
+    analyseLongs (&p->packet[11], payloadLen);
     DEBUG_OUT.println();
   }
   if (p->packetsLost > 0) {
@@ -213,6 +237,7 @@ void handleNrf1Irq() {
         packetLen = MAX_RF_PAYLOAD_SIZE;
 
       Radio.read(p->packet, packetLen);
+      shiftPayload(p);
       packetBuffer.pushFront(p);
       lostPacketCount = 0;
     }
@@ -265,6 +290,9 @@ static void activateConf(void) {
   //Radio.printDetails();
   //DEBUG_OUT.println();
   tickMillis = millis() + 200;
+#if USE_POOR_MAN_CHANNEL_HOPPING_RCV
+  poorManChannelHopping();
+#endif
 }
 
 #define resetRF24() activateConf()
@@ -341,6 +369,7 @@ void isTime2Send () {
         size = hmPackets.GetCmdPacket((uint8_t *)&sendBuf, dest >> 8, DTU_RADIO_ID >> 8, 0x15,  0x80 + tel - 1);
       SendPacket (dest, (uint8_t *)&sendBuf, size);
     }  // for wr
+
     
     tel++;
   }
@@ -519,36 +548,38 @@ void loop(void) {
   
   checkHoymilesIsOn();
 
-  while (!packetBuffer.empty()) {
-    timeLastPacket = millis();
-    // One or more records present
-    NRF24_packet_t *p = packetBuffer.getBack();
-    // Shift payload data due to 9-bit packet control field
-    shiftPayload (p);
-    
-    SerialHdr.timestamp   = p->timestamp;
-    SerialHdr.packetsLost = p->packetsLost;
-
-    uint8_t payloadLen = ((p->packet[0] & 0x01) << 5) | (p->packet[1] >> 3);
-    // Check CRC
-    if (! doCheckCrc(p, payloadLen) )
-      continue;
-
-    #ifdef DEBUG
-    //uint8_t cmd = p->packet[11];
-    //if (cmd != 0x01 && cmd != 0x02 && cmd != 0x83 && cmd != 0x81)
-      outputPacket (p, payloadLen);
-    #endif
-
-    analyse (p);
-
-    #ifndef ESP8266
-    //writeArduinoInterface();
-    #endif
-    
-    // Remove record as we're done with it.
-    packetBuffer.popBack();
+  if (packetBuffer.available() >= totalFragments) {
+    while (!packetBuffer.empty()) {
+      timeLastPacket = millis();
+      // One or more records present
+      NRF24_packet_t *p = packetBuffer.getBack();
+      // Shift payload data due to 9-bit packet control field
+      //shiftPayload (p);
+      
+      SerialHdr.timestamp   = p->timestamp;
+      SerialHdr.packetsLost = p->packetsLost;
+  
+      uint8_t payloadLen = ((p->packet[0] & 0x01) << 5) | (p->packet[1] >> 3);
+      // Check CRC
+      if (! doCheckCrc(p, payloadLen) )
+        continue;
+  
+      #ifdef DEBUG
+      //uint8_t cmd = p->packet[11];
+      //if (cmd != 0x01 && cmd != 0x02 && cmd != 0x83 && cmd != 0x81)
+        outputPacket (p, payloadLen);
+      #endif
+  
+      analyse (p);
+  
+      // Remove record as we're done with it.
+      packetBuffer.popBack();
+    }
+    memset (bufferData, 0, sizeof(bufferData));
   }
+  #ifndef ESP8266
+  writeArduinoInterface();
+  #endif
 
   if (istTag) 
     isTime2Send();
@@ -620,7 +651,7 @@ static void SendPacket(uint64_t dest, uint8_t *buf, uint8_t len) {
   Radio.startListening();
   ENABLE_EINT;
 #if USE_POOR_MAN_CHANNEL_HOPPING_RCV
-  hophop = 30 * sizeof(rcvChannels);
+  hophop = 50 * sizeof(rcvChannels);
 #endif
   yield();
 }
