@@ -35,4 +35,6 @@ measureCalc_t hm1200_measureCalc[] = {};
 #define HM1200_MEASURE_LIST_LEN  sizeof(hm1200_measureDef)/sizeof(measureDef_t)
 #define HM1200_CALCED_LIST_LEN    0
 
+uint8_t hm1200_fragmentLen[] = { 4, 16, 16, 16, 12 };      // 4 = Anzahl
+
 #endif

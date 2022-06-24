@@ -3,7 +3,6 @@
 #include "CircularBuffer.h"
 #include <RF24.h>
 #include "printf.h"
-#include <RF24_config.h>
 #include "hm_crc.h"
 #include "hm_packets.h"
 
@@ -11,7 +10,7 @@
 #include "Debug.h"
 #include "Inverters.h"
 
-const char VERSION[] PROGMEM = "0.2.1";
+const char VERSION[] PROGMEM = "0.4.1";
 
 
 #ifdef ESP8266
@@ -57,7 +56,8 @@ uint8_t         DEFAULT_SEND_CHANNEL  = channels[channelIdx];      // = 40
 
 #if USE_POOR_MAN_CHANNEL_HOPPING_RCV
 uint8_t         rcvChannelIdx         = 0; 
-uint8_t         rcvChannels[]         = {3, 23, 40, 61, 75};   //{1, 3, 6, 9, 11, 23, 40, 61, 75}
+//uint8_t         rcvChannels[]         = {3, 23, 40, 61, 75};   //{1, 3, 6, 9, 11, 23, 40, 61, 75}
+#define rcvChannels channels
 uint8_t         DEFAULT_RECV_CHANNEL  = rcvChannels[rcvChannelIdx];      //3;
 uint8_t         intvl = 4;          // Zeit für poor man hopping
 int             hophop;
@@ -75,14 +75,14 @@ static unsigned long timeLastIstTagCheck =  timeLastPacket;
 static unsigned long timeLastRcvChannelSwitch = timeLastPacket;
 static unsigned long timeLastHoyOnCheck = timeLastPacket;
 
+static const char BLANK = ' ';
+static boolean istTag = true;
+
+
 // Function forward declaration
 static void SendPacket(uint64_t dest, uint8_t *buf, uint8_t len);
 void shiftPayload (NRF24_packet_t *p);
 void outputPacket(NRF24_packet_t *p, uint8_t payloadLen);
-
-static const char BLANK = ' ';
-
-static boolean istTag = true;
 
 
 #ifdef ESP8266
@@ -103,14 +103,39 @@ inline static void dumpData(uint8_t *p, int len) {
   DEBUG_OUT.print(BLANK);
 }
 
-float extractValue (uint8_t *p, uint8_t bytes, uint16_t divisor) {
-//--------------------------------------------------------------  
+uint32_t extractInt (uint8_t *p, uint8_t bytes) {
   uint32_t val = 0;
   do {
       val <<= 8;
       val |= *p++;
   } while(--bytes);
+  return val;  
+}
+
+float extractValue (uint8_t *p, uint8_t bytes, uint16_t divisor) {
+//--------------------------------------------------------------  
+  volatile uint32_t val = 0;
+  /*
+  do {
+      val <<= 8;
+      val |= *p++;
+  } while(--bytes);
+  */
+  val = extractInt (p, bytes);
   return (float)val / (float) divisor;
+}
+
+void analyseWords (uint8_t *p) {    // p zeigt auf 01 hinter 2. WR-Adr
+//----------------------------------
+  //uint16_t val;
+  DEBUG_OUT.print (F("analyse words:"));
+  p++;
+  for (int i = 0; i <12;i++) {
+    DEBUG_OUT.print(extractValue(p,2,1));
+    DEBUG_OUT.print(BLANK);
+    p++;
+  }
+  DEBUG_OUT.println();
 }
 
 
@@ -123,95 +148,62 @@ void outChannel (uint8_t wr, uint8_t i) {
 }
 
 
-void analyseWords (uint8_t *p, uint8_t limit) {    // p zeigt auf 01 hinter 2. WR-Adr
-//----------------------------------
-  //uint16_t val;
-  DEBUG_OUT.print (F("analyse words:"));
-  p++;
-  for (int i = 0; i <limit;i++) {
-    DEBUG_OUT.print(extractValue (p,2,1));
-    DEBUG_OUT.print(BLANK);
-    p++;
-  }
-  DEBUG_OUT.println();
-}
-
-void analyseLongs (uint8_t *p, uint8_t limit) {    // p zeigt auf 01 hinter 2. WR-Adr
-//-------------------------------------------
-  //uint16_t val;
-  DEBUG_OUT.print (F("analyse longs:"));
-  p++;
-  for (int i = 0; i <limit;i++) {
-    DEBUG_OUT.print(extractValue(p,4,1));
-    DEBUG_OUT.print(BLANK);
-    p++;
-  }
-  DEBUG_OUT.println();
-}
-
-
 void analyse (NRF24_packet_t *p) {
 //------------------------------
   uint8_t wrIdx = findInverter (&p->packet[3]);
   //DEBUG_OUT.print ("wrIdx="); DEBUG_OUT.println (wrIdx);
   if (wrIdx == 0xFF) return;
-  uint8_t cmd = p->packet[11];
+  uint8_t subcmd = p->packet[11];
+  uint8_t response = p->packet[2];
   float val = 0;
 
-  if (cmd < inverters[wrIdx].fragmentCount || cmd == (0x80 + inverters[wrIdx].fragmentCount)) {
-    const measureDef_t *defs = inverters[wrIdx].measureDef;
-    for (uint8_t i = 0; i < inverters[wrIdx].anzMeasures; i++) {
-      if (defs[i].teleId == cmd) {
-        uint8_t pos = defs[i].pos;
-        uint8_t bytes = defs[i].bytes;
-        uint8_t frlIdx = (cmd > 0x80 ? cmd - 0x80 : cmd) -  1;
-        if (pos + bytes <= 12 + inverters[wrIdx].fragmentLen[frlIdx])
-          val = extractValue (&p->packet[pos], bytes, getDivisor(wrIdx, i) );
-        else {
-          // gesplitteter Wert
-          val = inverters[wrIdx].values[i];   // damit Wert bleibt, wenn nicht berechnet werden kann
-          NRF24_packet_t *x;
-          // suche Daten von cmd+1 
-          uint8_t suchCmd = (cmd == inverters[wrIdx].fragmentCount-1 ? 0x80 + inverters[wrIdx].fragmentCount : cmd + 1);
-          for (uint8_t b = 0; b < PACKET_BUFFER_SIZE; b++) {
-            x = &bufferData[b]; 
-            if (x->timestamp) {
-              if (x->packet[11] == suchCmd) {
-                uint32_t val1 = (p->packet[pos] << 8) | p->packet[pos+1];
-                uint32_t val2 = (x->packet[12] << 8) | x->packet[13];
-                val1 = (val1 <<16) + val2;
-                val = (float)(val1) / (float)getDivisor(wrIdx, i);
+  if (response == HOY_ANSWER_DATA) {
+    if (subcmd < inverters[wrIdx].fragmentCount || subcmd == (0x80 + inverters[wrIdx].fragmentCount)) {
+      const measureDef_t *defs = inverters[wrIdx].measureDef;
+      for (uint8_t i = 0; i < inverters[wrIdx].anzMeasures; i++) {
+        if (defs[i].teleId == subcmd) {
+          uint8_t pos     = defs[i].pos;
+          uint8_t bytes   = defs[i].bytes;
+          uint8_t frlIdx  = (subcmd & 0x7F)-1;               //(cmd > 0x80 ? cmd - 0x80 : cmd) -  1;
+          if (pos + bytes <= 12 + inverters[wrIdx].fragmentLen[frlIdx])
+            val = extractValue (&p->packet[pos], bytes, getDivisor(wrIdx, i) );
+          else {
+            // gesplitteter Wert
+            val = inverters[wrIdx].values[i];   // damit Wert bleibt, wenn nicht berechnet werden kann
+            NRF24_packet_t *x;
+            // suche Daten von cmd+1 
+            uint8_t fragmentCount = inverters[wrIdx].fragmentCount;
+            uint8_t suchCmd = (subcmd == fragmentCount-1 ? 0x80 + fragmentCount : subcmd + 1);
+            for (uint8_t b = 0; b < PACKET_BUFFER_SIZE; b++) {
+              x = &bufferData[b]; 
+              if (x->timestamp) {
+                if (x->packet[11] == suchCmd) {
+                  uint32_t val1 = extractInt (&p->packet[pos], 2);    // (p->packet[pos] << 8) | p->packet[pos+1];
+                  uint32_t val2 = extractInt (&x->packet[12], 2);     // (x->packet[12] << 8) | x->packet[13];
+                  val1 = (val1 <<16) + val2;
+                  val = (float)(val1) / (float)getDivisor(wrIdx, i);
+                } // if
               } // if
-            } // if
-          } // for
-        }
-        valueChanged = valueChanged || (val != inverters[wrIdx].values[i]);
-        inverters[wrIdx].values[i] = val;
-      }      
+            } // for
+          }
+          valueChanged = valueChanged || (val != inverters[wrIdx].values[i]);
+          inverters[wrIdx].values[i] = val;
+        }      
+      }
+      // calculated funstions
+      for (uint8_t i = 0; i < inverters[wrIdx].anzMeasureCalculated; i++) {
+        val = inverters[wrIdx].measureCalculated[i].f (inverters[wrIdx].values);
+        int idx = inverters[wrIdx].anzMeasures + i;
+        valueChanged = valueChanged ||(val != inverters[wrIdx].values[idx]);
+        inverters[wrIdx].values[idx] = val;
+      }
     }
-    // calculated funstions
-    for (uint8_t i = 0; i < inverters[wrIdx].anzMeasureCalculated; i++) {
-      val = inverters[wrIdx].measureCalculated[i].f (inverters[wrIdx].values);
-      int idx = inverters[wrIdx].anzMeasures + i;
-      valueChanged = valueChanged ||(val != inverters[wrIdx].values[idx]);
-      inverters[wrIdx].values[idx] = val;
-    }
-  }
-  else if (cmd == 0x81) {
-    ;
-  }
-  else {
-    DEBUG_OUT.print (F("---- neues cmd=")); DEBUG_OUT.println(cmd, HEX);
-    uint8_t payloadLen = ((p->packet[0] & 0x01) << 5) | (p->packet[1] >> 3);
-    if (payloadLen > MAX_RF_PAYLOAD_SIZE)
-      payloadLen = MAX_RF_PAYLOAD_SIZE;
-    analyseWords (&p->packet[11], payloadLen);
-    analyseLongs (&p->packet[11], payloadLen);
-    DEBUG_OUT.println();
+  } else if (response == HOY_ANSWER_BROADCAST) {
+    DEBUG_OUT.println("+++++++++++++++");
   }
   if (p->packetsLost > 0) {
-    DEBUG_OUT.print(F(" Lost: "));
-    DEBUG_OUT.println(p->packetsLost);
+    DEBUG_OUT.print   (F(" Lost: "));
+    DEBUG_OUT.println (p->packetsLost);
   }
 }
 
@@ -221,15 +213,14 @@ IRAM_ATTR
 void handleNrf1Irq() {
 //-------------------------
   static uint8_t lostPacketCount = 0;
-  uint8_t pipe;
 
   DISABLE_EINT;
   
   // Loop until RX buffer(s) contain no more packets.
-  while (Radio.available(&pipe)) {
+  while (Radio.available()) {
     if (!packetBuffer.full()) {
       NRF24_packet_t *p = packetBuffer.getFront();
-      p->timestamp = micros(); // Micros does not increase in interrupt, but it can be used.
+      p->timestamp   = micros(); // Micros does not increase in interrupt, but it can be used.
       p->packetsLost = lostPacketCount;
       p->rcvChannel  = DEFAULT_RECV_CHANNEL;
       uint8_t packetLen = Radio.getPayloadSize();
@@ -274,7 +265,7 @@ static void activateConf(void) {
   Radio.maskIRQ(true, true, false);
 
   // Use lo PA level, as a higher level will disturb CH340 DEBUG_OUT usb adapter
-  Radio.setPALevel(RF24_PA_MAX);
+  Radio.setPALevel (PA_LEVEL);
   Radio.startListening();
 
   // Attach interrupt handler to NRF IRQ output. Overwrites any earlier handler.
@@ -329,11 +320,30 @@ void setup(void) {
   hmPackets.SetUnixTimeStamp(0x62456430);
 #endif
 
-  setupInverts();
+  setupInverters();
 }
 
- uint8_t sendBuf[MAX_RF_PAYLOAD_SIZE];
+uint8_t sendBuf[MAX_RF_PAYLOAD_SIZE];
+uint8_t lastRequest = 0;
 
+void sendRequest (uint8_t wr, uint8_t MID, uint8_t subcmd) {
+//--------------------------------------------------------
+  int32_t size = 0;
+  lastRequest = MID;
+  uint64_t dest = inverters[wr].RadioId;
+  if (MID == HOY_REQUEST_DATA && subcmd == 0) {
+    #ifdef ESP8266
+    hmPackets.SetUnixTimeStamp (getNow());
+    #endif
+    size = hmPackets.GetTimePacket((uint8_t *)&sendBuf, dest >> 8, DTU_RADIO_ID >> 8);
+    //DEBUG_OUT.print ("Timepacket mit cid="); DEBUG_OUT.println(sendBuf[10], HEX);
+  }
+  else
+    size = hmPackets.GetCmdPacket((uint8_t *)&sendBuf, dest >> 8, DTU_RADIO_ID >> 8, MID,  subcmd);
+  SendPacket (dest, (uint8_t *)&sendBuf, size);
+}
+
+static uint8_t requestSend = 0;
 
 void isTime2Send () {
 //-----------------
@@ -350,28 +360,14 @@ void isTime2Send () {
       tickSec = 0;
     } 
 
-    int32_t size = 0;
-    uint64_t dest =  0;
     for (uint8_t wr = 0; wr < anzInv; wr++) {
-      dest = inverters[wr].RadioId;
-
-      if (tel > 0)
-        tel = 0;
-      
-      if (tel == 0) {
-        #ifdef ESP8266
-        hmPackets.SetUnixTimeStamp (getNow());
-        #endif
-        size = hmPackets.GetTimePacket((uint8_t *)&sendBuf, dest >> 8, DTU_RADIO_ID >> 8);
-        //DEBUG_OUT.print ("Timepacket mit cid="); DEBUG_OUT.println(sendBuf[10], HEX);
-      }
-      else if (tel <= 1) 
-        size = hmPackets.GetCmdPacket((uint8_t *)&sendBuf, dest >> 8, DTU_RADIO_ID >> 8, 0x15,  0x80 + tel - 1);
-      SendPacket (dest, (uint8_t *)&sendBuf, size);
+      sendRequest (wr, HOY_REQUEST_DATA, 0);
+      requestSend++;
+      //sendRequest (wr, HOY_BROADCAST, 0);    // Broadcast
     }  // for wr
-
-    
-    tel++;
+    packetBuffer.clear();
+    memset (bufferData, 0, sizeof(bufferData));
+    //tel++;
   }
 }
 
@@ -536,6 +532,36 @@ void shiftPayload (NRF24_packet_t *p) {
   }
 }
 
+static boolean retryMode = false;
+
+boolean packetsComplete() {
+//------------------------
+// checks that all cmd are recvd; if not sends request for missing cmd
+  if (retryMode && hophop <= 0) retryMode = false;
+  if (retryMode) return false;
+  boolean is[10] = {};    // 0 nicht besetzt
+  uint8_t cmd, i;
+  uint8_t wr = 0;     // TODO
+  NRF24_packet_t *x;
+  uint8_t fc = inverters[0].fragmentCount;
+  for (uint8_t b = 0; b < PACKET_BUFFER_SIZE; b++) {
+    x = &bufferData[b]; 
+    if (x->timestamp) {
+       cmd = x->packet[11];
+       i = (cmd & 0x7F);
+       is[i] = true;
+    }
+  }
+  for (i = 1; i <= fc; i++) {
+    if (!is[i]) {
+      DEBUG_OUT.print(F("Request cmd=")); DEBUG_OUT.println(i);
+      sendRequest (wr, HOY_REQUEST_DATA, 0x80 + i); 
+      retryMode = true;
+      return false;
+    }
+  }
+  return true;
+}
 
 void loop(void) {
 //=============
@@ -548,7 +574,9 @@ void loop(void) {
   
   checkHoymilesIsOn();
 
-  if (packetBuffer.available() >= totalFragments) {
+  if ((packetBuffer.available() >= totalFragments && packetsComplete()) 
+      // || (packetBuffer.available() && lastRequest == HOY_BROADCAST )
+     ) {
     while (!packetBuffer.empty()) {
       timeLastPacket = millis();
       // One or more records present
@@ -586,8 +614,17 @@ void loop(void) {
 
   #ifdef ESP8266
   checkWifi();
+#if USE_POOR_MAN_CHANNEL_HOPPING_RCV
+  poorManChannelHopping();
+#endif
   webserverHandle();       
+#if USE_POOR_MAN_CHANNEL_HOPPING_RCV
+  poorManChannelHopping();
+#endif
   checkUpdateByOTA();
+#if USE_POOR_MAN_CHANNEL_HOPPING_RCV
+  poorManChannelHopping();
+#endif
   if (hour() == 0 && minute() == 0) {
     calcSunUpDown(getNow());  
     delay (60*1000);

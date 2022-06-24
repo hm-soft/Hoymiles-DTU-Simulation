@@ -3,6 +3,11 @@
 
 #include "hm_crc.h"
 
+#define HOY_BROADCAST           0x02
+#define HOY_ANSWER_BROADCAST    (0x80+HOY_BROADCAST)
+#define HOY_REQUEST_DATA        0x15
+#define HOY_ANSWER_DATA         (0x80+HOY_REQUEST_DATA)
+
 class HM_Packets
 {
 private:
@@ -77,12 +82,12 @@ int32_t HM_Packets::GetTimePacket(uint8_t *buf, uint32_t wrAdr, uint32_t dtuAdr)
 	return 27;
 }
 
-int32_t HM_Packets::GetCmdPacket(uint8_t *buf, uint32_t wrAdr, uint32_t dtuAdr, uint8_t mid, uint8_t cmd)
+int32_t HM_Packets::GetCmdPacket(uint8_t *buf, uint32_t wrAdr, uint32_t dtuAdr, uint8_t mid, uint8_t subcmd)
 {
 	buf[0] = mid;
 	copyToBufferBE(&buf[1], wrAdr);
 	copyToBufferBE(&buf[5], dtuAdr);
-	buf[9] = cmd;
+	buf[9] = subcmd;
 
 	// crc8
 	buf[10] = crc8(&buf[0], 10);

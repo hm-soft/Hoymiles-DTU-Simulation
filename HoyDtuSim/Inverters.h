@@ -266,29 +266,5 @@ uint8_t getDigits (uint8_t wr, uint8_t i) {
     return p->measureCalculated[i-p->anzMeasures].digits;  
 }
 
-// +++++++++++++++++++++++++++++++++++    Inverter    ++++++++++++++++++++++++++++++++++++++++++++++
-
-#include "HM600.h"            // für HM-600 und HM-700
-
-//#include "HM1200.h"
-
-// +++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
-
-
-void setupInverts() {
-//-----------------  
-
-  addInverter (0,"HM-600", 0x114172607952ULL, 
-               hm600_measureDef, HM600_MEASURE_LIST_LEN,     // Tabelle der Messwerte
-               hm600_measureCalc, HM600_CALCED_LIST_LEN,     // Tabelle der Berechnungen
-               hm600_fragmentLen);                           // Tabelle berechnete Werte
-
-/*
-  addInverter (1,"HM-1200", 0x114172607952ULL, 
-               hm1200_measureDef, HM1200_MEASURE_LIST_LEN,     // Tabelle der Messwerte
-               hm1200_measureCalc, HM1200_CALCED_LIST_LEN);    // Tabelle berechnete Werte
-*/
-}
-
 
 #endif
