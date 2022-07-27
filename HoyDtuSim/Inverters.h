@@ -30,7 +30,7 @@ const char* const units[] = {"V", "Hz", "A", "W", "Wh", "°C", "KWh", "mA", "%",
 
 // CH0 is default channel (freq, ac, temp)
 enum CHANNELS {CH0 = 0, CH1, CH2, CH3, CH4};
-enum CMDS     {CMD01 = 0x01, CMD02, CMD03, CMD83 = 0x83, CMD84};
+enum CMDS     {CMD01 = 0x01, CMD02, CMD03, CMD82 = 0x82, CMD83 = 0x83, CMD84};
 enum DIVS     {DIV1 = 0, DIV10, DIV100, DIV1000};
 
 #define BYTES2        2

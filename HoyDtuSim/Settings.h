@@ -44,7 +44,7 @@
 #if MAX_ANZ_INV >= 1 
 #include "HM600.h"                            // <<<<<< anpassen und folgende Defs
 #define WR1_NAME "HM-600"
-#define WR1_SERIAL 0x1141????????ULL
+#define WR1_SERIAL 0x114172607952ULL
 #define WR1_MEASUREDEF hm600_measureDef
 #define WR1_MEASURECALC hm600_measureCalc
 #define WR1_FRAGMENTS hm600_fragmentLen
@@ -54,7 +54,7 @@
 #if MAX_ANZ_INV >= 2                        
 #include "HM1200.h"                           // <<<<<< anpassen und folgende Defs
 #define WR2_NAME "HM-1200"
-#define WR2_SERIAL 0x????????????ULL
+#define WR2_SERIAL 0x114472607952ULL
 #define WR2_MEASUREDEF hm1200_measureDef
 #define WR2_MEASURECALC hm1200_measureCalc
 #define WR2_FRAGMENTS hm1200_fragmentLen
@@ -62,12 +62,12 @@
 
 // Beispiel für 3. WR
 #if MAX_ANZ_INV >= 3 
-#include "HM600.h"                            // <<<<<< anpassen und folgende Defs
-#define WR3_NAME "HM-600"
-#define WR3_SERIAL 0x???????????ULL
-#define WR3_MEASUREDEF hm600_measureDef
-#define WR3_MEASURECALC hm600_measureCalc
-#define WR3_FRAGMENTS hm600_fragmentLen
+#include "HM400.h"                            // <<<<<< anpassen und folgende Defs
+#define WR3_NAME "HM-400"
+#define WR3_SERIAL 0x114112345678ULL
+#define WR3_MEASUREDEF hm400_measureDef
+#define WR3_MEASURECALC hm400_measureCalc
+#define WR3_FRAGMENTS hm400_fragmentLen
 #endif
 
 // ##########################  WIFI  ##############################
@@ -85,16 +85,16 @@
 // OTA Einstellungen
 #define UPDATESERVER_PORT   WEBSERVER_PORT+1
 #define UPDATESERVER_DIR    "/update"
-#define UPDATESERVER_USER   "????"					      // <<<<<< anpassen
-#define UPDATESERVER_PW     "?????????????"		          // <<<<<< anpassen
+#define UPDATESERVER_USER   "??????"					      // <<<<<< anpassen
+#define UPDATESERVER_PW     "??????"				      // <<<<<< anpassen
 #endif
 
 // internes WLan
 // PREFIXE dienen dazu, die eigenen WLans (wenn mehrere) von fremden zu unterscheiden
 // gehe hier davon aus, dass alle WLans das gleiche Passwort haben. Wenn nicht, dann mehre Passwörter hinterlegen
-#define SSID_PREFIX1         "WLAN"					      // <<<<<< anpassen
-#define SSID_PREFIX2         "????"					      // <<<<<< anpassen
-#define SSID_PASSWORD        "????????????????"		      // <<<<<< anpassen
+#define SSID_PREFIX1         "????"					      // <<<<<< anpassen
+//#define SSID_PREFIX2       "????"					      // <<<<<< anpassen
+#define SSID_PASSWORD        "????????????????"		// <<<<<< anpassen
 
 
 // zur Berechnung von Sonnenauf- und -untergang
