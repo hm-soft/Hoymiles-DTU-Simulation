@@ -30,34 +30,37 @@
 
 // soll zwichen den Sendekanälen 23, 40, 61, 75 ständig gewechselt werden
 #define CHANNEL_HOP
-
 #define USE_POOR_MAN_CHANNEL_HOPPING_RCV  1     // 0 = not use
 
 #define DUMMY_RADIO_ID          ((uint64_t)0xDEADBEEF01ULL) 
 #define DTU_RADIO_ID            ((uint64_t)0x1234567801ULL)
 #define MAX_MEASURE_PER_INV 25    // hier statisch, könnte auch dynamisch erzeugt werden, aber Overhead für dyn. Speicher?
 
-#define MAX_ANZ_INV 1                       // <<<<<< anpassen oder dyn.
+#define MAX_ANZ_INV             1                       // <<<<<< anpassen oder dyn.
+#define POLL_INTERVALL_WR       10                      // für jeden WR
+uint16_t WAIT_TILL_NEXT_SEND;
 
 #include "Inverters.h"
 
 #if MAX_ANZ_INV >= 1 
 #include "HM600.h"                            // <<<<<< anpassen und folgende Defs
 #define WR1_NAME "HM-600"
-#define WR1_SERIAL 0x114172607952ULL
+#define WR1_SERIAL 0x1141????????ULL
 #define WR1_MEASUREDEF hm600_measureDef
 #define WR1_MEASURECALC hm600_measureCalc
 #define WR1_FRAGMENTS hm600_fragmentLen
+uint16_t WR1_MODULEPEAKS[] = {2, 370, 370};
 #endif
 
 // Beispiel für 2. WR
 #if MAX_ANZ_INV >= 2                        
 #include "HM1200.h"                           // <<<<<< anpassen und folgende Defs
 #define WR2_NAME "HM-1200"
-#define WR2_SERIAL 0x114472607952ULL
+#define WR2_SERIAL 0x1144????????ULL
 #define WR2_MEASUREDEF hm1200_measureDef
 #define WR2_MEASURECALC hm1200_measureCalc
 #define WR2_FRAGMENTS hm1200_fragmentLen
+uint16_t WR2_MODULEPEAKS[] = {4, 370, 370, 365, 375};
 #endif
 
 // Beispiel für 3. WR
@@ -68,6 +71,7 @@
 #define WR3_MEASUREDEF hm400_measureDef
 #define WR3_MEASURECALC hm400_measureCalc
 #define WR3_FRAGMENTS hm400_fragmentLen
+uint16_t WR3_MODULEPEAKS[] = {1, 425};
 #endif
 
 // ##########################  WIFI  ##############################
@@ -85,7 +89,7 @@
 // OTA Einstellungen
 #define UPDATESERVER_PORT   WEBSERVER_PORT+1
 #define UPDATESERVER_DIR    "/update"
-#define UPDATESERVER_USER   "??????"					      // <<<<<< anpassen
+#define UPDATESERVER_USER   "??????"				      // <<<<<< anpassen
 #define UPDATESERVER_PW     "??????"				      // <<<<<< anpassen
 #endif
 
@@ -93,8 +97,8 @@
 // PREFIXE dienen dazu, die eigenen WLans (wenn mehrere) von fremden zu unterscheiden
 // gehe hier davon aus, dass alle WLans das gleiche Passwort haben. Wenn nicht, dann mehre Passwörter hinterlegen
 #define SSID_PREFIX1         "????"					      // <<<<<< anpassen
-//#define SSID_PREFIX2       "????"					      // <<<<<< anpassen
-#define SSID_PASSWORD        "????????????????"		// <<<<<< anpassen
+//#define SSID_PREFIX2         "????"					      // <<<<<< anpassen
+#define SSID_PASSWORD        "???????????????"		// <<<<<< anpassen
 
 
 // zur Berechnung von Sonnenauf- und -untergang
@@ -110,20 +114,26 @@ void setupInverters() {
   addInverter (anzInv, WR1_NAME, WR1_SERIAL,    
                WR1_MEASUREDEF, sizeof(WR1_MEASUREDEF) / sizeof(measureDef_t),
                WR1_MEASURECALC, sizeof(WR1_MEASURECALC) / sizeof(measureCalc_t),
-               WR1_FRAGMENTS);
+               WR1_FRAGMENTS,
+               WR1_MODULEPEAKS);
 #endif
 #if MAX_ANZ_INV >= 2 
   addInverter (anzInv, WR2_NAME, WR2_SERIAL,    
                WR2_MEASUREDEF, sizeof(WR2_MEASUREDEF) / sizeof(measureDef_t),
                WR2_MEASURECALC, sizeof(WR2_MEASURECALC) / sizeof(measureCalc_t),
-               WR2_FRAGMENTS);
+               WR2_FRAGMENTS,
+               WR2_MODULEPEAKS);
 #endif
 #if MAX_ANZ_INV >= 3 
-  addInverter (anzInv, WR3_NAME, WR3_SERIAL,    
+   addInverter (anzInv, WR3_NAME, WR3_SERIAL,    
                WR3_MEASUREDEF, sizeof(WR3_MEASUREDEF) / sizeof(measureDef_t),
                WR3_MEASURECALC, sizeof(WR3_MEASURECALC) / sizeof(measureCalc_t),
-               WR3_FRAGMENTS);
+               WR3_FRAGMENTS,
+               WR3_MODULEPEAKS);
 #endif
+  WAIT_TILL_NEXT_SEND = POLL_INTERVALL_WR / anzInv;
+  if (WAIT_TILL_NEXT_SEND < 3) 
+    WAIT_TILL_NEXT_SEND = 3;
 }
 
 #endif

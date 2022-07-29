@@ -50,6 +50,8 @@ const char IPV[]      PROGMEM  = "Ipv";
 const char WR_TEMP[]  PROGMEM = "WR-Temp";
 const char PERCNT[]   PROGMEM = "Pct";
 const char WR_STATUS[]PROGMEM = "Status";
+const char WR_EFF[]   PROGMEM = "WR-Eff.";
+const char IRRADIATION[] PROGMEM = "Irrad";
 
 #define IDX_UDC       0
 #define IDX_IDC       1
@@ -65,11 +67,13 @@ const char WR_STATUS[]PROGMEM = "Status";
 #define IDX_WR_TEMP  11
 #define IDX_PERCNT   12    
 #define IDX_STATUS   13
+#define IDX_WR_EFF   14
+#define IDX_IRR      15
 
 const char* const NAMES[] 
-  = {UDC, IDC, PDC, E_WOCHE, E_TOTAL, E_TAG, UAC, FREQ, PAC, E_HEUTE, IPV, WR_TEMP, PERCNT, WR_STATUS};
+  = {UDC, IDC, PDC, E_WOCHE, E_TOTAL, E_TAG, UAC, FREQ, PAC, E_HEUTE, IPV, WR_TEMP, PERCNT, WR_STATUS, WR_EFF, IRRADIATION };
 
-typedef float (*calcValueFunc)(float *);
+typedef float (*calcValueFunc) (uint8_t wr); // (float *);
 
 struct measureDef_t {
   uint8_t     nameIdx;        //const char* name;           // Zeiger auf den Messwertnamen
@@ -83,6 +87,7 @@ struct measureDef_t {
 
 struct measureCalc_t {
   uint8_t     nameIdx;        //const char* name;           // Zeiger auf den Messwertnamen
+  uint8_t     channel;        // 0..4, 
   uint8_t     unitIdx;        // Index in die Liste der Einheiten 'units'
   uint8_t     digits;
   calcValueFunc f;            // die Funktion zur Berechnung von Werten, zb Summe von Werten
@@ -101,6 +106,7 @@ struct inverter_t {
   uint8_t       anzTotalMeasures;         // Gesamtanzahl Messwerte
   uint8_t       fragmentCount;
   uint8_t       fragmentLen[10];
+  uint16_t      modPeaks[4];
   float         values[MAX_MEASURE_PER_INV];  // DIE Messewerte
 };
 
@@ -143,7 +149,8 @@ uint64_t Serial2RadioID (uint64_t sn) {
 void addInverter (uint8_t _ID, const char * _name, uint64_t _serial, 
                   const measureDef_t * liste, int anzMeasure,
                   measureCalc_t * calcs, int anzMeasureCalculated,
-                  uint8_t _fragmentLen[]) {
+                  uint8_t _fragmentLen[], 
+                  uint16_t _modPeaks[]) {
 //-------------------------------------------------------------------------------------
   if (anzInv >= MAX_ANZ_INV) {
     DEBUG_OUT.println(F("ANZ_INV zu klein!"));
@@ -163,12 +170,17 @@ void addInverter (uint8_t _ID, const char * _name, uint64_t _serial,
   totalFragments += p->fragmentCount;
   memcpy (p->fragmentLen, &_fragmentLen[1], p->fragmentCount);
   memset (p->values, 0, sizeof(p->values));
-
+  memset (p->modPeaks, 0, sizeof(p->modPeaks));
+  memcpy (p->modPeaks, &_modPeaks[0], (_modPeaks[0]+1)*sizeof(uint16_t));
+  
   DEBUG_OUT.print (F("WR       : "));      DEBUG_OUT.println(anzInv);
   DEBUG_OUT.print (F("Type     : "));      DEBUG_OUT.println(_name);
   DEBUG_OUT.print (F("Serial   : "));      DEBUG_OUT.println(uint64toa(_serial));
   DEBUG_OUT.print (F("Radio-ID : "));      DEBUG_OUT.println(uint64toa(p->RadioId));
   DEBUG_OUT.print (F("Fragmente: "));      DEBUG_OUT.println(p->fragmentCount);
+  DEBUG_OUT.print (F("Module Wp: "));   
+  for (uint8_t i = 1; i <= p->modPeaks[0]; i++) { DEBUG_OUT.print(p->modPeaks[i]); DEBUG_OUT.print(' '); }
+  DEBUG_OUT.println();
 
   anzInv++;
 }
@@ -206,6 +218,7 @@ char *getMeasureName (uint8_t wr, uint8_t i){
   }
   else {
     idx = p->measureCalculated[i - p->anzMeasures].nameIdx;  
+    channel = p->measureCalculated[i-p->anzMeasures].channel;
   }
   char tmp[20];
   strcpy_P (_buffer, NAMES[idx]);
@@ -267,4 +280,12 @@ uint8_t getDigits (uint8_t wr, uint8_t i) {
 }
 
 
+uint8_t getPosByChannelAndIDX (uint8_t wr, uint8_t IDX, uint8_t channel) {
+//----------------------------------------------------------------------
+  inverter_t *p = &(inverters[wr]);
+  for (uint8_t i = 0; i < p->anzMeasures; i++) {
+    if (p->measureDef[i].nameIdx == IDX && p->measureDef[i].channel == channel) return i;
+  }
+  return 0xFF;
+}
 #endif

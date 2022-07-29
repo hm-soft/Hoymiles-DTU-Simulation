@@ -67,6 +67,9 @@ uint8_t         DEFAULT_RECV_CHANNEL  = 3;
 
 boolean         valueChanged          = false;
 
+uint8_t         aktWR                 = 0xFF;                     // damit mit 0 nach 1. inc gestartet wird
+
+
 #define RESET_VALUES_AFTER_TIME_NO_PAKET 1000UL*60*10
 // wenn 10 Minuten keine Antwort mehr von WR, dann Werte auf 0 setzen
 
@@ -192,7 +195,7 @@ void analyse (NRF24_packet_t *p) {
       }
       // calculated funstions
       for (uint8_t i = 0; i < inverters[wrIdx].anzMeasureCalculated; i++) {
-        val = inverters[wrIdx].measureCalculated[i].f (inverters[wrIdx].values);
+        val = inverters[wrIdx].measureCalculated[i].f (wrIdx);   //(inverters[wrIdx].values);
         int idx = inverters[wrIdx].anzMeasures + i;
         valueChanged = valueChanged ||(val != inverters[wrIdx].values[idx]);
         inverters[wrIdx].values[idx] = val;
@@ -213,7 +216,7 @@ IRAM_ATTR
 void handleNrf1Irq() {
 //-------------------------
   static uint8_t lostPacketCount = 0;
-
+  
   DISABLE_EINT;
   
   // Loop until RX buffer(s) contain no more packets.
@@ -229,7 +232,9 @@ void handleNrf1Irq() {
 
       Radio.read(p->packet, packetLen);
       shiftPayload(p);
-      packetBuffer.pushFront(p);
+      uint8_t wrIdx = findInverter (&p->packet[3]);
+      if (wrIdx == aktWR)
+        packetBuffer.pushFront(p);
       lostPacketCount = 0;
     }
     else {
@@ -348,7 +353,7 @@ static uint8_t requestSend = 0;
 void isTime2Send () {
 //-----------------
   // Second timer
-  static const uint8_t warteZeit = 10;
+  static const uint8_t warteZeit = WAIT_TILL_NEXT_SEND;   // 10
   static uint8_t tickSec = 0;
   if (millis() >= tickMillis) {
     static uint8_t tel = 0;
@@ -360,11 +365,21 @@ void isTime2Send () {
       tickSec = 0;
     } 
 
+/*
     for (uint8_t wr = 0; wr < anzInv; wr++) {
       sendRequest (wr, HOY_REQUEST_DATA, 0);
       requestSend++;
       //sendRequest (wr, HOY_BROADCAST, 0);    // Broadcast
     }  // for wr
+    */
+    
+    aktWR++;
+    if (aktWR >= anzInv) 
+      aktWR = 0;
+    //DEBUG_OUT.print(aktWR); DEBUG_OUT.print(BLANK);
+    sendRequest (aktWR, HOY_REQUEST_DATA, 0);
+    requestSend++;  
+    
     packetBuffer.clear();
     memset (bufferData, 0, sizeof(bufferData));
     //tel++;
@@ -555,7 +570,7 @@ boolean packetsComplete() {
   for (i = 1; i <= fc; i++) {
     if (!is[i]) {
       DEBUG_OUT.print(F("Request cmd=")); DEBUG_OUT.println(i);
-      sendRequest (wr, HOY_REQUEST_DATA, 0x80 + i); 
+      sendRequest (aktWR, HOY_REQUEST_DATA, 0x80 + i); 
       retryMode = true;
       return false;
     }
