@@ -67,7 +67,7 @@ uint8_t         DEFAULT_RECV_CHANNEL  = 3;
 
 boolean         valueChanged          = false;
 
-uint8_t         aktWR                 = 0xFF;                     // damit mit 0 nach 1. inc gestartet wird
+uint8_t         aktWR                 = 0x00;                    
 
 
 #define RESET_VALUES_AFTER_TIME_NO_PAKET 1000UL*60*10
@@ -155,7 +155,11 @@ void analyse (NRF24_packet_t *p) {
 //------------------------------
   uint8_t wrIdx = findInverter (&p->packet[3]);
   //DEBUG_OUT.print ("wrIdx="); DEBUG_OUT.println (wrIdx);
-  if (wrIdx == 0xFF) return;
+  if (wrIdx == 0xFF || wrIdx != aktWR) {
+    DEBUG_OUT.print(F("unbek. wrId=")); DEBUG_OUT.println(wrIdx);
+    return;
+  }
+    
   uint8_t subcmd = p->packet[11];
   uint8_t response = p->packet[2];
   float val = 0;
@@ -286,9 +290,6 @@ static void activateConf(void) {
   //Radio.printDetails();
   //DEBUG_OUT.println();
   tickMillis = millis() + 200;
-#if USE_POOR_MAN_CHANNEL_HOPPING_RCV
-  poorManChannelHopping();
-#endif
 }
 
 #define resetRF24() activateConf()
@@ -365,18 +366,23 @@ void isTime2Send () {
       tickSec = 0;
     } 
 
-/*
-    for (uint8_t wr = 0; wr < anzInv; wr++) {
-      sendRequest (wr, HOY_REQUEST_DATA, 0);
-      requestSend++;
-      //sendRequest (wr, HOY_BROADCAST, 0);    // Broadcast
-    }  // for wr
-    */
-    
+#if MAX_ANZ_INV > 1  
     aktWR++;
     if (aktWR >= anzInv) 
       aktWR = 0;
-    //DEBUG_OUT.print(aktWR); DEBUG_OUT.print(BLANK);
+    #if TEST_MULTI
+    for (uint8_t i = 0; i < anzInv; i++) {
+      setSerialNo (i, 0x114172600000ULL );
+    }
+    if (aktWR == 0) setSerialNo (0, WR1_SERIAL); 
+    if (aktWR == 1) setSerialNo (1, WR2_SERIAL); 
+    #if MAX_ANZ_INV > 2
+    if (aktWR == 2) setSerialNo (3, WR3_SERIAL); 
+    #endif
+    #endif
+#endif
+    
+    DEBUG_OUT.print(aktWR); DEBUG_OUT.print(BLANK);
     sendRequest (aktWR, HOY_REQUEST_DATA, 0);
     requestSend++;  
     
@@ -441,11 +447,12 @@ void outputPacket(NRF24_packet_t *p, uint8_t payloadLen) {
 void writeArduinoInterface() {
 //--------------------------
   if (valueChanged) {
-    for (uint8_t wr = 0; wr < anzInv; wr++) {
-      if (anzInv > 1) {
-        Serial.print(wr); Serial.print('.');
-      }
+    //for (uint8_t wr = 0; wr < anzInv; wr++) {
+    {  uint8_t wr = aktWR;
       for (uint8_t i = 0; i < inverters[wr].anzTotalMeasures; i++) {
+        if (anzInv > 1) {
+          Serial.print(wr); Serial.print('.');
+        }
         Serial.print(getMeasureName(wr,i));    // Schnittstelle bei Arduino
         Serial.print('='); 
         Serial.print(getMeasureValue(wr,i), getDigits(wr,i));   // Schnittstelle bei Arduino
@@ -556,9 +563,9 @@ boolean packetsComplete() {
   if (retryMode) return false;
   boolean is[10] = {};    // 0 nicht besetzt
   uint8_t cmd, i;
-  uint8_t wr = 0;     // TODO
+  uint8_t wr = aktWR;     // TODO
   NRF24_packet_t *x;
-  uint8_t fc = inverters[0].fragmentCount;
+  uint8_t fc = inverters[wr].fragmentCount;
   for (uint8_t b = 0; b < PACKET_BUFFER_SIZE; b++) {
     x = &bufferData[b]; 
     if (x->timestamp) {

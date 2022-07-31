@@ -145,6 +145,11 @@ uint64_t Serial2RadioID (uint64_t sn) {
   return res.ull;
 }
 
+void setSerialNo (uint8_t wr, uint64_t _serial) {
+//---------------------------------------------  
+  inverters[wr].serialNo = _serial;
+  inverters[wr].RadioId = Serial2RadioID(_serial);
+}
 
 void addInverter (uint8_t _ID, const char * _name, uint64_t _serial, 
                   const measureDef_t * liste, int anzMeasure,
@@ -159,8 +164,9 @@ void addInverter (uint8_t _ID, const char * _name, uint64_t _serial,
   inverter_t *p = &(inverters[anzInv]);
   p->ID                   = _ID;
   strcpy (p->name, _name);
-  p->serialNo             = _serial;
-  p->RadioId              = Serial2RadioID(_serial);
+  /*p->serialNo             = _serial;
+  p->RadioId              = Serial2RadioID(_serial); */
+  setSerialNo (anzInv, _serial); 
   p->measureDef           = liste;
   p->anzMeasures          = anzMeasure;
   p->anzMeasureCalculated = anzMeasureCalculated;

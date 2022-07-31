@@ -45,7 +45,7 @@ uint16_t WAIT_TILL_NEXT_SEND;
 #if MAX_ANZ_INV >= 1 
 #include "HM600.h"                            // <<<<<< anpassen und folgende Defs
 #define WR1_NAME "HM-600"
-#define WR1_SERIAL 0x1141????????ULL
+#define WR1_SERIAL 0x114100000001ULL
 #define WR1_MEASUREDEF hm600_measureDef
 #define WR1_MEASURECALC hm600_measureCalc
 #define WR1_FRAGMENTS hm600_fragmentLen
@@ -54,20 +54,19 @@ uint16_t WR1_MODULEPEAKS[] = {2, 370, 370};
 
 // Beispiel für 2. WR
 #if MAX_ANZ_INV >= 2                        
-#include "HM1200.h"                           // <<<<<< anpassen und folgende Defs
-#define WR2_NAME "HM-1200"
-#define WR2_SERIAL 0x1144????????ULL
-#define WR2_MEASUREDEF hm1200_measureDef
-#define WR2_MEASURECALC hm1200_measureCalc
-#define WR2_FRAGMENTS hm1200_fragmentLen
-uint16_t WR2_MODULEPEAKS[] = {4, 370, 370, 365, 375};
+#define WR2_NAME "HM-600-1"
+#define WR2_SERIAL 0x114100000002ULL
+#define WR2_MEASUREDEF hm600_measureDef
+#define WR2_MEASURECALC hm600_measureCalc
+#define WR2_FRAGMENTS hm600_fragmentLen
+uint16_t WR2_MODULEPEAKS[] = {2, 375, 375};
 #endif
 
 // Beispiel für 3. WR
 #if MAX_ANZ_INV >= 3 
 #include "HM400.h"                            // <<<<<< anpassen und folgende Defs
 #define WR3_NAME "HM-400"
-#define WR3_SERIAL 0x114112345678ULL
+#define WR3_SERIAL 0x114100000003ULL
 #define WR3_MEASUREDEF hm400_measureDef
 #define WR3_MEASURECALC hm400_measureCalc
 #define WR3_FRAGMENTS hm400_fragmentLen
@@ -96,9 +95,9 @@ uint16_t WR3_MODULEPEAKS[] = {1, 425};
 // internes WLan
 // PREFIXE dienen dazu, die eigenen WLans (wenn mehrere) von fremden zu unterscheiden
 // gehe hier davon aus, dass alle WLans das gleiche Passwort haben. Wenn nicht, dann mehre Passwörter hinterlegen
-#define SSID_PREFIX1         "????"					      // <<<<<< anpassen
-//#define SSID_PREFIX2         "????"					      // <<<<<< anpassen
-#define SSID_PASSWORD        "???????????????"		// <<<<<< anpassen
+#define SSID_PREFIX1         "??????"					      // <<<<<< anpassen
+//#define SSID_PREFIX2         "??????"					      // <<<<<< anpassen
+#define SSID_PASSWORD        "13234567890123456"		// <<<<<< anpassen
 
 
 // zur Berechnung von Sonnenauf- und -untergang
@@ -106,7 +105,7 @@ uint16_t WR3_MODULEPEAKS[] = {1, 425};
 #define  geoLaenge  7.3416							          // <<<<<< anpassen
 
 
-
+#define TEST_MULTI 1
 
 void setupInverters() {
 //-----------------  
@@ -132,8 +131,9 @@ void setupInverters() {
                WR3_MODULEPEAKS);
 #endif
   WAIT_TILL_NEXT_SEND = POLL_INTERVALL_WR / anzInv;
-  if (WAIT_TILL_NEXT_SEND < 3) 
-    WAIT_TILL_NEXT_SEND = 3;
+  if (WAIT_TILL_NEXT_SEND < 5) 
+    WAIT_TILL_NEXT_SEND = 5;
+  WAIT_TILL_NEXT_SEND=10;  
 }
 
 #endif
