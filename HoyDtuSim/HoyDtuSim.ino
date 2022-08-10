@@ -596,7 +596,7 @@ void loop(void) {
   
   checkHoymilesIsOn();
 
-  if ((packetBuffer.available() >= totalFragments && packetsComplete()) 
+  if ((packetBuffer.available() >= inverters[aktWR].fragmentCount && packetsComplete())
       // || (packetBuffer.available() && lastRequest == HOY_BROADCAST )
      ) {
     while (!packetBuffer.empty()) {
